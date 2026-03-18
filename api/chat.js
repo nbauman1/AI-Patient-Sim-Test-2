@@ -1,52 +1,100 @@
-export function GET() {
+export async function GET() {
   return new Response('chat endpoint is live', { status: 200 });
 }
 
 export async function POST(request) {
   try {
-    const { message } = await request.json();
+    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-    if (!message) {
-      return Response.json({ error: 'Missing message' }, { status: 400 });
+    if (!ANTHROPIC_API_KEY) {
+      return Response.json(
+        { error: 'API key not configured on server.' },
+        { status: 500 }
+      );
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const { userMessage, conversationHistory = [] } = await request.json();
+
+    const SYSTEM_PROMPT = `You are a routing assistant for a clinical training simulation. A clinician is taking a history from John Smith, a 68-year-old with early Parkinson's disease.
+
+Classify the clinician's message into exactly one topic key. Respond ONLY with a valid JSON object — no other text, no markdown, no explanation.
+
+TOPIC KEYS:
+- early_symptoms: asking about main symptoms, tremor, stiffness, walking, handwriting, daily activities — also includes general opening questions like "what's wrong", "what brings you in", "how can I help", "what seems to be the problem", "what's going on", "what are your symptoms", "what is the problem you're having", "what's been going on"
+- early_symptoms_followup: specifically probing facial expression, hypomimia, voice changes, hypophonia, quieter voice, expressiveness
+- onset: when symptoms started, how long ago, age at onset, timeline
+- onset_followup: asking about earlier symptoms before the tremor, shoulder pain, frozen shoulder, prodromal symptoms, symptoms before the main ones
+- progression: how symptoms changed over time, getting worse, sudden changes, falls, disability — includes phrases like "did it come on quickly", "did it appear slowly", "has it gotten worse", "is it progressing", "how fast", "sudden or gradual", "how long has it been getting worse", "rate of progression", "deteriorating", "did your symptoms appear quickly or slowly"
+- progression_followup: specifically asking about freezing of gait, freezing episodes, feet stopping, doorways, feet freezing, getting stuck when walking
+- family: family history of similar conditions, relatives with tremor or movement disorders
+- family_followup: probing further relatives beyond parents, uncles, aunts, extended family, wheelchair use, other relatives
+- drugs: current medications, what John takes now — includes any phrasing like "are you taking any medication", "what medication are you on", "any tablets", "any pills", "what do you take", "are you on anything", "any prescriptions", "are you on any meds"
+- drugs_followup: specifically asking about past medications, previous drugs, metoclopramide, anti-nausea, reflux, dopamine blockers, historical drug use, medications in the past
+- rbd: sleep behaviour, acting out dreams, moving or shouting in sleep, REM sleep disorder — includes phrases like "how do you sleep", "any sleep problems", "sleep issues", "disturbances at night", "restless sleep", "does your partner say anything about your sleep", "any unusual sleep behaviour", "nighttime movements"
+- rbd_followup: specifically asking about how long the sleep issues have been happening, duration, timeline of RBD, when it started, how long ago
+- neuro: memory, cognition, mood, hallucinations, behaviour, psychiatric symptoms — includes phrases like "how's your mood", "how are you feeling emotionally", "any depression", "feeling low", "mental health", "memory problems", "forgetful", "confused", "seeing things", "hearing things", "mood changes", "anxiety", "feeling sad", "emotional state", "how are you in yourself", "any psychological symptoms"
+- neuro_followup: specifically asking about vivid dreams (not acting them out), cognitive slowing, thinking speed, processing speed, slow thinking, dreams that are unusually intense
+- autonomic: dizziness, bladder, bowel, constipation, fainting, orthostatic hypotension, erectile dysfunction — includes phrases like "any dizziness", "feel lightheaded", "bladder issues", "toilet problems", "bowel changes", "constipated", "pass out", "faint", "dizzy when standing", "autonomic symptoms", "bodily functions", "sexual function"
+- autonomic_followup: specifically asking about fainting episodes, blackouts, losing consciousness, postural syncope, passing out, collapsing, ever fainted
+- vague: unclear follow-up with no specific topic — e.g. "tell me more", "go on", "anything else?", "any other problems?", "what else?", "ok", "okay", "cool", "right", "I see", "got it", "interesting", "and?", "yes", "no", "sure", "really?". These are not clinical questions and should never route to a topic.
+- fallback: completely off-topic, irrelevant, or nothing to do with medical history or clinical assessment
+
+Important rules:
+1. Only route to a _followup key if the clinician is asking something genuinely specific and targeted at that deeper layer of information.
+2. If the message is vague, non-specific, or just an acknowledgement, always use "vague" — even if a topic was just discussed.
+3. Do NOT let the previous topic in the conversation bias your classification. Each message should be classified on its own meaning.
+4. After a vague or fallback exchange, treat the next message generously — if it could plausibly map to any real topic, route it there rather than vague or fallback.
+5. Use "fallback" only for truly off-topic messages that have nothing to do with medical history or clinical assessment.
+6. When in doubt between vague and a real topic, lean toward the real topic if the message has any clinical intent.
+
+Respond ONLY with: {"topic": "key_here", "feedback": "1-2 sentence clinical commentary on the quality of this question."}`;
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'content-type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 300,
-        system: 'You are simulating a patient for a medical training demo. Stay in character. Answer naturally. Do not mention being an AI.',
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 200,
+        system: SYSTEM_PROMPT,
         messages: [
-          {
-            role: 'user',
-            content: message
-          }
+          ...conversationHistory.slice(-12),
+          { role: 'user', content: userMessage }
         ]
       })
     });
 
-    const data = await response.json();
+    const data = await res.json();
 
-    if (!response.ok) {
+    if (data.error) {
       return Response.json(
-        { error: data?.error?.message || 'Anthropic request failed' },
-        { status: response.status }
+        { error: data.error.message || 'Anthropic request failed' },
+        { status: 500 }
       );
     }
 
-    const reply =
-      data?.content?.map(part => part.text).filter(Boolean).join('\n') ||
-      'No response returned.';
+    let raw = '';
+    let parsed = { topic: 'fallback', feedback: '' };
 
-    return Response.json({ reply });
+    try {
+      raw = data.content[0].text.trim();
+      raw = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      parsed = { topic: 'fallback', feedback: '' };
+    }
+
+    return Response.json(parsed);
   } catch (err) {
     return Response.json(
-      { error: 'Server error', details: err.message },
+      { error: err.message || 'Server error' },
       { status: 500 }
     );
   }
