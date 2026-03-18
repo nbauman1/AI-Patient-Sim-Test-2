@@ -451,6 +451,75 @@ body {
 <script>
 const PROXY_URL = '/api/chat';
 
+const RESPONSES = {
+  early_symptoms: "It started with a slight tremor in my right hand. At first it was just every now and then, but over time it's become more noticeable. I've also felt a bit slower doing simple things.",
+  early_symptoms_followup: "My wife says my face looks a bit more serious lately, and people ask me to repeat myself sometimes because my voice seems quieter than it used to be.",
+  onset: "I first noticed the tremor about 14 months ago. I was 67 at the time, and it seemed subtle at first.",
+  onset_followup: "Thinking back, I did have some stiffness in my right shoulder before the tremor really became obvious. I just thought it was part of getting older.",
+  progression: "It has come on gradually rather than all at once. The tremor is more frequent now, and I feel slower than I used to, but it hasn't suddenly changed.",
+  progression_followup: "I don't really get stuck in doorways, but every now and then it feels like my feet hesitate for a moment before I get going.",
+  family: "Not that I know of. My parents never had Parkinson's, and I don't remember anyone in the family having a tremor like this.",
+  family_followup: "I can't think of any aunts, uncles, or other relatives with similar problems either.",
+  drugs: "At the moment I just take medication for blood pressure and cholesterol. Nothing specifically for this tremor yet.",
+  drugs_followup: "I've never taken anything like metoclopramide or other anti-sickness medicines for long periods, and I haven't been on any major neurological medications before.",
+  rbd: "My wife has mentioned that I sometimes jerk in my sleep and occasionally talk or shout during dreams. I wasn't very aware of it myself.",
+  rbd_followup: "She says it's been going on for at least a couple of years, maybe longer.",
+  neuro: "My mood has been mostly okay, though I do feel a bit frustrated by all of this. I haven't had hallucinations or anything like that, and my memory seems mostly fine.",
+  neuro_followup: "I do have some vivid dreams sometimes, and maybe I'm a little slower in my thinking than I used to be, but nothing dramatic.",
+  autonomic: "I do get constipated more than I used to, and sometimes I feel a bit lightheaded when I stand up too quickly.",
+  autonomic_followup: "I've never fully blacked out, but there have been a few moments where I felt close to fainting when I stood up fast.",
+  vague: "Could you be a little more specific about what you'd like to know?",
+  fallback: "I'm not really sure how that relates to what's been going on with me."
+};
+
+const TOPIC_ORDER = [
+  'early_symptoms',
+  'onset',
+  'progression',
+  'family',
+  'drugs',
+  'rbd',
+  'neuro',
+  'autonomic'
+];
+
+const FOLLOWUP_MAP = {
+  early_symptoms_followup: 'early_symptoms',
+  onset_followup: 'onset',
+  progression_followup: 'progression',
+  family_followup: 'family',
+  drugs_followup: 'drugs',
+  rbd_followup: 'rbd',
+  neuro_followup: 'neuro',
+  autonomic_followup: 'autonomic'
+};
+
+const TOPIC_LABELS = {
+  early_symptoms: 'Early symptoms',
+  onset: 'Age of onset',
+  progression: 'Symptom progression',
+  family: 'Family history',
+  drugs: 'Drug history',
+  rbd: 'REM sleep / RBD',
+  neuro: 'Neuropsychiatry',
+  autonomic: 'Autonomic dysfunction'
+};
+
+const topicState = {};
+const reviewState = {};
+const conversationHistory = [];
+
+TOPIC_ORDER.forEach(topic => {
+  topicState[topic] = { partial: false, full: false };
+  reviewState[topic] = [];
+});
+
+function normalizeTopic(topic) {
+  if (TOPIC_ORDER.includes(topic)) return topic;
+  if (FOLLOWUP_MAP[topic]) return FOLLOWUP_MAP[topic];
+  return topic;
+}
+
 function addMessage(role, text) {
   const chat = document.getElementById('chat-area');
   const msg = document.createElement('div');
@@ -509,6 +578,131 @@ function hideTyping() {
   if (typing) typing.remove();
 }
 
+function showFeedback(text) {
+  const area = document.getElementById('feedback-area');
+  const el = document.getElementById('feedback-text');
+  if (!text) {
+    area.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  el.textContent = text;
+  area.style.display = 'block';
+}
+
+function showNudge(show) {
+  document.getElementById('nudge-area').style.display = show ? 'flex' : 'none';
+  if (!show) {
+    document.getElementById('hint-text').style.display = 'none';
+  }
+}
+
+function revealHint() {
+  document.getElementById('hint-text').style.display = 'block';
+}
+
+function markTopic(topic, isFollowup) {
+  const chip = document.getElementById(`chip-${topic}`);
+  const badge = document.getElementById(`badge-${topic}`);
+  if (!chip || !badge) return;
+
+  if (isFollowup) {
+    topicState[topic].partial = true;
+    topicState[topic].full = true;
+    chip.classList.remove('partial');
+    chip.classList.add('full');
+    badge.textContent = 'covered';
+  } else {
+    if (!topicState[topic].partial) {
+      topicState[topic].partial = true;
+      chip.classList.add('partial');
+      badge.textContent = 'more to explore';
+    }
+  }
+
+  updateProgress();
+  updateCompleteBanner();
+}
+
+function updateProgress() {
+  let score = 0;
+  TOPIC_ORDER.forEach(topic => {
+    if (topicState[topic].full) {
+      score += 1;
+    } else if (topicState[topic].partial) {
+      score += 0.5;
+    }
+  });
+
+  const pct = Math.round((score / TOPIC_ORDER.length) * 100);
+  document.getElementById('progress-pct').textContent = `${pct}%`;
+  document.getElementById('progress-bar').style.width = `${pct}%`;
+}
+
+function updateCompleteBanner() {
+  const allFull = TOPIC_ORDER.every(topic => topicState[topic].full);
+  document.getElementById('complete-banner').style.display = allFull ? 'block' : 'none';
+}
+
+function recordReview(topic, clinicianQuestion, patientResponse, status) {
+  if (!TOPIC_ORDER.includes(topic)) return;
+
+  reviewState[topic].push({
+    question: clinicianQuestion,
+    response: patientResponse,
+    status
+  });
+}
+
+function openReview() {
+  const panel = document.getElementById('review-panel');
+  const body = document.getElementById('review-body');
+  body.innerHTML = '';
+
+  let hasContent = false;
+
+  TOPIC_ORDER.forEach(topic => {
+    const entries = reviewState[topic];
+    if (!entries.length) return;
+    hasContent = true;
+
+    const isFull = topicState[topic].full;
+    const item = document.createElement('div');
+    item.className = 'review-item';
+
+    const label = document.createElement('div');
+    label.className = `review-item-label ${isFull ? 'full' : 'partial'}`;
+    label.innerHTML = `
+      <span>${TOPIC_LABELS[topic]}</span>
+      <span class="review-item-status">${isFull ? 'covered' : 'partial'}</span>
+    `;
+
+    item.appendChild(label);
+
+    entries.forEach(entry => {
+      const text = document.createElement('div');
+      text.className = 'review-item-text';
+      text.innerHTML = `<strong>You asked:</strong> ${entry.question}<br><strong>John said:</strong> ${entry.response}`;
+      item.appendChild(text);
+    });
+
+    body.appendChild(item);
+  });
+
+  if (!hasContent) {
+    const empty = document.createElement('div');
+    empty.className = 'review-empty';
+    empty.textContent = 'No history captured yet.';
+    body.appendChild(empty);
+  }
+
+  panel.classList.add('open');
+}
+
+function closeReview() {
+  document.getElementById('review-panel').classList.remove('open');
+}
+
 async function sendMessage() {
   const input = document.getElementById('user-input');
   const btn = document.getElementById('send-btn');
@@ -520,12 +714,16 @@ async function sendMessage() {
   input.value = '';
   btn.disabled = true;
   showTyping();
+  showNudge(false);
 
   try {
     const response = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text })
+      body: JSON.stringify({
+        userMessage: text,
+        conversationHistory
+      })
     });
 
     const data = await response.json();
@@ -536,7 +734,31 @@ async function sendMessage() {
       return;
     }
 
-    addMessage('patient', data.reply || 'No response.');
+    const topic = data.topic || 'fallback';
+    const patientReply = RESPONSES[topic] || RESPONSES.fallback;
+    const feedback = data.feedback || '';
+
+    addMessage('patient', patientReply);
+    showFeedback(feedback);
+
+    conversationHistory.push({ role: 'user', content: text });
+    conversationHistory.push({ role: 'assistant', content: JSON.stringify(data) });
+
+    if (topic === 'fallback' || topic === 'vague') {
+      showNudge(true);
+      return;
+    }
+
+    const baseTopic = normalizeTopic(topic);
+    const isFollowup = topic.endsWith('_followup');
+
+    markTopic(baseTopic, isFollowup);
+    recordReview(
+      baseTopic,
+      text,
+      patientReply,
+      isFollowup ? 'full' : 'partial'
+    );
   } catch (error) {
     hideTyping();
     console.error(error);
@@ -554,21 +776,12 @@ function handleKey(event) {
   }
 }
 
-function openReview() {
-  document.getElementById('review-panel').classList.add('open');
-}
-
-function closeReview() {
-  document.getElementById('review-panel').classList.remove('open');
-}
-
-function revealHint() {
-  document.getElementById('hint-text').style.display = 'block';
-}
-
 window.onload = function () {
   setTimeout(() => {
-    addMessage('patient', "Good morning. I'm John. I've been having some shaking in my right hand, and my GP thought I should come in and get it checked out.");
+    addMessage(
+      'patient',
+      "Good morning. I'm John. I've been having some shaking in my right hand, and my GP thought I should come in and get it checked out."
+    );
   }, 300);
 };
 </script></body>
