@@ -13,41 +13,70 @@ export async function POST(request) {
       );
     }
 
-    const { userMessage, conversationHistory = [] } = await request.json();
+    const { userMessage } = await request.json();
 
-    const SYSTEM_PROMPT = `You are a routing assistant for a clinical training simulation. A clinician is taking a history from John Smith, a 68-year-old with early Parkinson's disease.
+    const text = userMessage.toLowerCase().trim();
 
-Classify the clinician's message into exactly one topic key. Respond ONLY with a valid JSON object — no other text, no markdown, no explanation.
+    // 🔥 1. HARD SHORTCUTS (cheapest + most reliable)
+    if (
+      text === "hi" ||
+      text === "hello" ||
+      text === "hey" ||
+      text === "good morning" ||
+      text === "good afternoon" ||
+      text === "how are you" ||
+      text === "how are you feeling"
+    ) {
+      return Response.json({ topic: "early_symptoms" });
+    }
 
-TOPIC KEYS:
-- early_symptoms: asking about main symptoms, tremor, stiffness, walking, handwriting, daily activities — also includes general opening questions like "what's wrong", "what brings you in", "how can I help", "what seems to be the problem", "what's going on", "what are your symptoms", "what is the problem you're having", "what's been going on"
-- early_symptoms_followup: specifically probing facial expression, hypomimia, voice changes, hypophonia, quieter voice, expressiveness
-- onset: when symptoms started, how long ago, age at onset, timeline
-- onset_followup: asking about earlier symptoms before the tremor, shoulder pain, frozen shoulder, prodromal symptoms, symptoms before the main ones
-- progression: how symptoms changed over time, getting worse, sudden changes, falls, disability — includes phrases like "did it come on quickly", "did it appear slowly", "has it gotten worse", "is it progressing", "how fast", "sudden or gradual", "how long has it been getting worse", "rate of progression", "deteriorating", "did your symptoms appear quickly or slowly"
-- progression_followup: specifically asking about freezing of gait, freezing episodes, feet stopping, doorways, feet freezing, getting stuck when walking
-- family: family history of similar conditions, relatives with tremor or movement disorders
-- family_followup: probing further relatives beyond parents, uncles, aunts, extended family, wheelchair use, other relatives
-- drugs: current medications, what John takes now — includes any phrasing like "are you taking any medication", "what medication are you on", "any tablets", "any pills", "what do you take", "are you on anything", "any prescriptions", "are you on any meds"
-- drugs_followup: specifically asking about past medications, previous drugs, metoclopramide, anti-nausea, reflux, dopamine blockers, historical drug use, medications in the past
-- rbd: sleep behaviour, acting out dreams, moving or shouting in sleep, REM sleep disorder — includes phrases like "how do you sleep", "any sleep problems", "sleep issues", "disturbances at night", "restless sleep", "does your partner say anything about your sleep", "any unusual sleep behaviour", "nighttime movements"
-- rbd_followup: specifically asking about how long the sleep issues have been happening, duration, timeline of RBD, when it started, how long ago
-- neuro: memory, cognition, mood, hallucinations, behaviour, psychiatric symptoms — includes phrases like "how's your mood", "how are you feeling emotionally", "any depression", "feeling low", "mental health", "memory problems", "forgetful", "confused", "seeing things", "hearing things", "mood changes", "anxiety", "feeling sad", "emotional state", "how are you in yourself", "any psychological symptoms"
-- neuro_followup: specifically asking about vivid dreams (not acting them out), cognitive slowing, thinking speed, processing speed, slow thinking, dreams that are unusually intense
-- autonomic: dizziness, bladder, bowel, constipation, fainting, orthostatic hypotension, erectile dysfunction — includes phrases like "any dizziness", "feel lightheaded", "bladder issues", "toilet problems", "bowel changes", "constipated", "pass out", "faint", "dizzy when standing", "autonomic symptoms", "bodily functions", "sexual function"
-- autonomic_followup: specifically asking about fainting episodes, blackouts, losing consciousness, postural syncope, passing out, collapsing, ever fainted
-- vague: unclear follow-up with no specific topic — e.g. "tell me more", "go on", "anything else?", "any other problems?", "what else?", "ok", "okay", "cool", "right", "I see", "got it", "interesting", "and?", "yes", "no", "sure", "really?". These are not clinical questions and should never route to a topic.
-- fallback: completely off-topic, irrelevant, or nothing to do with medical history or clinical assessment
+    if (
+      text === "ok" ||
+      text === "okay" ||
+      text === "cool" ||
+      text === "right" ||
+      text === "i see" ||
+      text === "got it"
+    ) {
+      return Response.json({ topic: "vague" });
+    }
 
-Important rules:
-1. Only route to a _followup key if the clinician is asking something genuinely specific and targeted at that deeper layer of information.
-2. If the message is vague, non-specific, or just an acknowledgement, always use "vague" — even if a topic was just discussed.
-3. Do NOT let the previous topic in the conversation bias your classification. Each message should be classified on its own meaning.
-4. After a vague or fallback exchange, treat the next message generously — if it could plausibly map to any real topic, route it there rather than vague or fallback.
-5. Use "fallback" only for truly off-topic messages that have nothing to do with medical history or clinical assessment.
-6. When in doubt between vague and a real topic, lean toward the real topic if the message has any clinical intent.
+    // 🧠 2. COMPRESSED + MORE GENEROUS PROMPT
+    const SYSTEM_PROMPT = `
+You classify clinician questions about a Parkinson’s patient.
 
-Respond ONLY with: {"topic": "key_here", "feedback": "1-2 sentence clinical commentary on the quality of this question."}`;
+Return ONLY JSON:
+{"topic":"key"}
+
+Topics:
+- early_symptoms: symptoms OR general opening questions (what’s wrong, how are you feeling, what brings you in, what’s going on)
+- early_symptoms_followup: facial expression, quiet voice
+- onset: when symptoms started
+- onset_followup: earlier symptoms before tremor
+- progression: worsening over time
+- progression_followup: freezing of gait
+- family: family history
+- family_followup: extended relatives
+- drugs: current meds
+- drugs_followup: past meds, dopamine blockers
+- rbd: sleep behavior
+- rbd_followup: duration of sleep issues
+- neuro: mood, memory, hallucinations
+- neuro_followup: vivid dreams, slow thinking
+- autonomic: dizziness, bowel, bladder
+- autonomic_followup: fainting
+- vague: filler (ok, sure, etc)
+- fallback: unrelated
+
+Rules:
+- Be GENEROUS: if it could be a real topic, choose it
+- Prefer early_symptoms for broad or unclear clinical questions
+- Only use vague if it has no clinical intent
+- Ignore prior context
+
+Respond ONLY with:
+{"topic":"key"}
+`;
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -58,10 +87,9 @@ Respond ONLY with: {"topic": "key_here", "feedback": "1-2 sentence clinical comm
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
+        max_tokens: 50, // 🔥 smaller output
         system: SYSTEM_PROMPT,
         messages: [
-          ...conversationHistory.slice(-12),
           { role: 'user', content: userMessage }
         ]
       })
@@ -76,22 +104,23 @@ Respond ONLY with: {"topic": "key_here", "feedback": "1-2 sentence clinical comm
       );
     }
 
-    let raw = '';
-    let parsed = { topic: 'fallback', feedback: '' };
+    let parsed = { topic: 'fallback' };
 
     try {
-      raw = data.content[0].text.trim();
+      let raw = data.content[0].text.trim();
       raw = raw
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
         .replace(/\s*```$/i, '')
         .trim();
+
       parsed = JSON.parse(raw);
     } catch (e) {
-      parsed = { topic: 'fallback', feedback: '' };
+      parsed = { topic: 'fallback' };
     }
 
     return Response.json(parsed);
+
   } catch (err) {
     return Response.json(
       { error: err.message || 'Server error' },
