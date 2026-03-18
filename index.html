@@ -449,39 +449,127 @@ body {
 </div>
 
 <script>
- const PROXY_URL = '/api/chat';
+const PROXY_URL = '/api/chat';
 
-  async function sendMessage() {
-    const input = document.getElementById('user-input');
-    const text = input.value.trim();
-    if (!text) return;
+function addMessage(role, text) {
+  const chat = document.getElementById('chat-area');
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.textContent = role === 'patient' ? 'JS' : 'You';
+
+  const content = document.createElement('div');
+  content.className = 'msg-content';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = role === 'patient' ? 'John Smith' : 'Clinician';
+
+  content.appendChild(bubble);
+  content.appendChild(meta);
+
+  msg.appendChild(avatar);
+  msg.appendChild(content);
+
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function showTyping() {
+  const chat = document.getElementById('chat-area');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'typing-wrap';
+  wrap.id = 'typing-indicator';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.style.background = 'var(--red)';
+  avatar.style.color = 'white';
+  avatar.textContent = 'JS';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'typing-bubble';
+  bubble.innerHTML = '<span></span><span></span><span></span>';
+
+  wrap.appendChild(avatar);
+  wrap.appendChild(bubble);
+  chat.appendChild(wrap);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function hideTyping() {
+  const typing = document.getElementById('typing-indicator');
+  if (typing) typing.remove();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('user-input');
+  const btn = document.getElementById('send-btn');
+  const text = input.value.trim();
+
+  if (!text) return;
+
+  addMessage('clinician', text);
+  input.value = '';
+  btn.disabled = true;
+  showTyping();
+
+  try {
+    const response = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+
+    const data = await response.json();
+    hideTyping();
+
+    if (!response.ok) {
+      addMessage('patient', data.error || 'Something went wrong.');
+      return;
     }
 
-    appendMessage('user', text);
-    input.value = '';
-
-    try {
-      const response = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
-      });
-
-      const data = await response.json();
-      appendMessage('assistant', data.reply || 'No response.');
-    } catch (error) {
-      console.error(error);
-      appendMessage('assistant', 'Error connecting to server.');
-    }
+    addMessage('patient', data.reply || 'No response.');
+  } catch (error) {
+    hideTyping();
+    console.error(error);
+    addMessage('patient', 'Error connecting to server.');
+  } finally {
+    btn.disabled = false;
+    input.focus();
   }
+}
 
-  function appendMessage(role, text) {
-    const chat = document.getElementById('chat');
-    const msg = document.createElement('div');
-    msg.className = role;
-    msg.textContent = text;
-    chat.appendChild(msg);
-    chat.scrollTop = chat.scrollHeight;
+function handleKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
   }
+}
+
+function openReview() {
+  document.getElementById('review-panel').classList.add('open');
+}
+
+function closeReview() {
+  document.getElementById('review-panel').classList.remove('open');
+}
+
+function revealHint() {
+  document.getElementById('hint-text').style.display = 'block';
+}
+
+window.onload = function () {
+  setTimeout(() => {
+    addMessage('patient', "Good morning. I'm John. I've been having some shaking in my right hand, and my GP thought I should come in and get it checked out.");
+  }, 300);
+};
 </script></body>
 </html>
