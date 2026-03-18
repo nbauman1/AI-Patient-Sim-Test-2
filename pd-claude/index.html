@@ -449,18 +449,12 @@ body {
 </div>
 
 <script>
-  const NETLIFY_URL = 'https://chic-babka-c3ff09.netlify.app';
-  const PROXY_URL = NETLIFY_URL + '/.netlify/functions/chat';
+ const PROXY_URL = '/api/chat';
 
   async function sendMessage() {
     const input = document.getElementById('user-input');
     const text = input.value.trim();
     if (!text) return;
-
-    // Only check if it's missing (no more blocking valid URLs)
-    if (!NETLIFY_URL) {
-      alert('Please paste your Netlify URL in the file.');
-      return;
     }
 
     appendMessage('user', text);
