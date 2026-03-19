@@ -414,7 +414,7 @@ body {
       <div class="modal-header-sub">Clinical Simulation — Parkinson's Disease History Taking</div>
     </div>
     <div class="modal-body">
-      <p>This learning activity is designed to help you practise recalling key information relevant to taking a patient history. It focuses on recognising the words and phrases identified as clinically important by the course authors.</p>
+      <p>This learning activity is designed to help you practice recalling key information relevant to taking a patient history. It focuses on recognizing the words and phrases identified as clinically important by the course authors.</p>
       <p>Please be aware that this simulation does not perfectly replicate a real clinical conversation. While the questions or statements you enter may be entirely appropriate, the system may not always interpret them correctly. This is an inherent limitation of the format rather than a reflection of your clinical communication.</p>
       <p>If you find yourself stuck at any point, use the <strong>hint buttons</strong> on the left to reveal the topics covered in this module.</p>
       <p>For questions or concerns, please contact <a href="mailto:education@mds.org">education@mds.org</a>.</p>
@@ -740,6 +740,9 @@ function markTopic(topic, isFollowup) {
   const chip = document.getElementById(`chip-${topic}`);
   const badge = document.getElementById(`badge-${topic}`);
   if (!chip || !badge) return;
+
+  // Always reveal the base hint so the followup hint becomes visible
+  revealHintBtn(topic);
 
   if (isFollowup) {
     topicState[topic].partial = true;
