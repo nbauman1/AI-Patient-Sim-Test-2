@@ -734,6 +734,12 @@ function revealHintBtn(topic) {
   btn.classList.add('revealed');
   const label = btn.querySelector('.hint-label');
   if (label) label.textContent = `Ask about ${TOPIC_LABELS[topic]}`;
+
+  // If this is a base topic, explicitly show the followup hint button
+  if (TOPIC_ORDER.includes(topic)) {
+    const followupBtn = document.getElementById(`hint-${topic}_followup`);
+    if (followupBtn) followupBtn.style.display = 'flex';
+  }
 }
 
 function markTopic(topic, isFollowup) {
