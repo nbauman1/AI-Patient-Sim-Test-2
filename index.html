@@ -99,28 +99,52 @@ body {
 .topics-list { display: flex; flex-direction: column; gap: 4px; }
 
 .topic-item {
-  display: none; flex-direction: column;
-  padding: 7px 9px; border-radius: 8px; font-size: 11px;
+  display: flex; flex-direction: column;
+  padding: 0; border-radius: 8px; font-size: 11px;
   border: 1px solid transparent; transition: all 0.25s;
 }
+.topic-item .topic-inner {
+  display: none;
+  padding: 7px 9px;
+}
+
+/* Hint button state */
+.hint-btn {
+  width: 100%; padding: 6px 9px;
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 11px; color: var(--text-muted);
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+  text-align: left; transition: all 0.18s;
+  display: flex; align-items: center; gap: 7px;
+}
+.hint-btn:hover { border-color: var(--red-border); color: var(--red); background: var(--red-light); }
+.hint-btn .hint-label { flex: 1; }
+.hint-btn.revealed { color: var(--text-secondary); font-style: italic; border-color: var(--border); }
+.hint-btn.hidden-by-coverage { display: none; }
 
 /* Partial — amber */
 .topic-item.partial {
-  display: flex;
-  color: var(--amber);
-  background: var(--amber-light);
   border-color: var(--amber-border);
+  background: var(--amber-light);
   animation: revealTopic 0.35s ease;
 }
+.topic-item.partial .topic-inner {
+  display: flex;
+  color: var(--amber);
+}
+.topic-item.partial .hint-btn { display: none; }
 
 /* Full — green */
 .topic-item.full {
-  display: flex;
-  color: var(--green);
-  background: var(--green-light);
   border-color: var(--green-border);
+  background: var(--green-light);
   animation: revealTopic 0.35s ease;
 }
+.topic-item.full .topic-inner {
+  display: flex;
+  color: var(--green);
+}
+.topic-item.full .hint-btn { display: none; }
 
 @keyframes revealTopic {
   from { opacity: 0; transform: translateY(-4px); }
@@ -272,7 +296,7 @@ body {
 @keyframes blink { 0%,60%,100%{opacity:0.25} 30%{opacity:1} }
 
 /* Bottom */
-.bottom-section { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--white); }
+.bottom-section { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--white); overflow: hidden; }
 
 .feedback-area { padding: 0.65rem 1.5rem; border-bottom: 1px solid var(--border); display: none; }
 .feedback-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--red); font-weight: 500; margin-bottom: 3px; }
@@ -325,9 +349,74 @@ body {
   .sidebar { display: none; }
   .review-panel { left: 0; }
 }
+
+/* Disclaimer modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1.5rem;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: var(--white); border-radius: 14px;
+  max-width: 520px; width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  overflow: hidden;
+}
+.modal-header {
+  background: var(--red); padding: 1.1rem 1.4rem;
+}
+.modal-header-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 17px; color: var(--white); line-height: 1.2;
+}
+.modal-header-sub {
+  font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 3px;
+}
+.modal-body { padding: 1.4rem 1.4rem 0.6rem; }
+.modal-body p {
+  font-size: 13px; color: var(--text-secondary);
+  line-height: 1.75; margin-bottom: 0.85rem;
+}
+.modal-body p:last-of-type { margin-bottom: 0; }
+.modal-body a { color: var(--red); text-decoration: none; }
+.modal-body a:hover { text-decoration: underline; }
+.modal-footer {
+  padding: 1rem 1.4rem 1.3rem;
+  display: flex; justify-content: flex-end;
+}
+.modal-confirm-btn {
+  background: var(--red); color: var(--white); border: none;
+  border-radius: 8px; padding: 9px 22px;
+  font-size: 13px; font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer; transition: opacity 0.18s;
+}
+.modal-confirm-btn:hover { opacity: 0.88; }
 </style>
 </head>
 <body>
+
+<!-- Disclaimer modal -->
+<div class="modal-overlay" id="disclaimer-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-header-title">Before You Begin</div>
+      <div class="modal-header-sub">Clinical Simulation — Parkinson's Disease History Taking</div>
+    </div>
+    <div class="modal-body">
+      <p>This learning activity is designed to help you practise recalling key information relevant to taking a patient history. It focuses on recognising the words and phrases identified as clinically important by the course authors.</p>
+      <p>Please be aware that this simulation does not perfectly replicate a real clinical conversation. While the questions or statements you enter may be entirely appropriate, the system may not always interpret them correctly. This is an inherent limitation of the format rather than a reflection of your clinical communication.</p>
+      <p>If you find yourself stuck at any point, use the <strong>hint buttons</strong> on the left to reveal the topics covered in this module.</p>
+      <p>For questions or concerns, please contact <a href="mailto:education@mds.org">education@mds.org</a>.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-confirm-btn" onclick="dismissDisclaimer()">I understand — begin simulation</button>
+    </div>
+  </div>
+</div>
+
 <div class="layout">
 
   <!-- SIDEBAR -->
@@ -366,28 +455,36 @@ body {
       <div class="progress-title" style="margin-bottom:8px;">Domains explored</div>
       <div class="topics-list">
         <div class="topic-item" id="chip-early_symptoms">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">Early symptoms</span><span class="topic-badge" id="badge-early_symptoms">more to explore</span></div>
+          <button class="hint-btn" id="hint-early_symptoms" onclick="revealHintBtn('early_symptoms')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Early symptoms</span><span class="topic-badge" id="badge-early_symptoms">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-onset">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">Age of onset</span><span class="topic-badge" id="badge-onset">more to explore</span></div>
+          <button class="hint-btn" id="hint-onset" onclick="revealHintBtn('onset')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Age of onset</span><span class="topic-badge" id="badge-onset">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-progression">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">Symptom progression</span><span class="topic-badge" id="badge-progression">more to explore</span></div>
+          <button class="hint-btn" id="hint-progression" onclick="revealHintBtn('progression')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Symptom progression</span><span class="topic-badge" id="badge-progression">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-family">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">Family history</span><span class="topic-badge" id="badge-family">more to explore</span></div>
+          <button class="hint-btn" id="hint-family" onclick="revealHintBtn('family')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Family history</span><span class="topic-badge" id="badge-family">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-drugs">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">Drug history</span><span class="topic-badge" id="badge-drugs">more to explore</span></div>
+          <button class="hint-btn" id="hint-drugs" onclick="revealHintBtn('drugs')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Drug history</span><span class="topic-badge" id="badge-drugs">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-rbd">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">REM sleep / RBD</span><span class="topic-badge" id="badge-rbd">more to explore</span></div>
+          <button class="hint-btn" id="hint-rbd" onclick="revealHintBtn('rbd')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">REM sleep / RBD</span><span class="topic-badge" id="badge-rbd">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-neuro">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">Neuropsychiatry</span><span class="topic-badge" id="badge-neuro">more to explore</span></div>
+          <button class="hint-btn" id="hint-neuro" onclick="revealHintBtn('neuro')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Neuropsychiatry</span><span class="topic-badge" id="badge-neuro">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-autonomic">
-          <div class="topic-row"><span class="topic-dot"></span><span class="topic-name">Autonomic dysfunction</span><span class="topic-badge" id="badge-autonomic">more to explore</span></div>
+          <button class="hint-btn" id="hint-autonomic" onclick="revealHintBtn('autonomic')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Autonomic dysfunction</span><span class="topic-badge" id="badge-autonomic">more to explore</span></div>
         </div>
       </div>
     </div>
@@ -507,11 +604,13 @@ const TOPIC_LABELS = {
 
 const topicState = {};
 const reviewState = {};
-const conversationHistory = [];
+const topicAskCount = {}; // tracks asks per full topic key (incl. _followup)
 
 TOPIC_ORDER.forEach(topic => {
   topicState[topic] = { partial: false, full: false };
   reviewState[topic] = [];
+  topicAskCount[topic] = 0;
+  topicAskCount[topic + '_followup'] = 0;
 });
 
 function normalizeTopic(topic) {
@@ -599,6 +698,18 @@ function showNudge(show) {
 
 function revealHint() {
   document.getElementById('hint-text').style.display = 'block';
+}
+
+function dismissDisclaimer() {
+  document.getElementById('disclaimer-modal').classList.add('hidden');
+}
+
+function revealHintBtn(topic) {
+  const btn = document.getElementById(`hint-${topic}`);
+  if (!btn || btn.classList.contains('revealed')) return;
+  btn.classList.add('revealed');
+  const label = btn.querySelector('.hint-label');
+  if (label) label.textContent = `Ask about ${TOPIC_LABELS[topic]}`;
 }
 
 function markTopic(topic, isFollowup) {
@@ -720,10 +831,7 @@ async function sendMessage() {
     const response = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userMessage: text,
-        conversationHistory
-      })
+      body: JSON.stringify({ userMessage: text })
     });
 
     const data = await response.json();
@@ -735,19 +843,36 @@ async function sendMessage() {
     }
 
     const topic = data.topic || 'fallback';
-    const patientReply = RESPONSES[topic] || RESPONSES.fallback;
     const feedback = data.feedback || '';
 
-    addMessage('patient', patientReply);
-    showFeedback(feedback);
-
-    conversationHistory.push({ role: 'user', content: text });
-    conversationHistory.push({ role: 'assistant', content: JSON.stringify(data) });
-
     if (topic === 'fallback' || topic === 'vague') {
+      addMessage('patient', RESPONSES[topic] || RESPONSES.fallback);
+      showFeedback(feedback);
       showNudge(true);
       return;
     }
+
+    // Increment ask count for this specific topic key
+    if (topicAskCount[topic] !== undefined) {
+      topicAskCount[topic]++;
+    } else {
+      topicAskCount[topic] = 1;
+    }
+
+    const count = topicAskCount[topic];
+    const baseResponse = RESPONSES[topic] || RESPONSES.fallback;
+
+    let patientReply;
+    if (count === 1) {
+      patientReply = baseResponse;
+    } else if (count === 2) {
+      patientReply = `As I mentioned — ${baseResponse} Did you mean something else?`;
+    } else {
+      patientReply = `I think we've already covered that. Perhaps there's another area you'd like to ask about?`;
+    }
+
+    addMessage('patient', patientReply);
+    showFeedback(feedback);
 
     const baseTopic = normalizeTopic(topic);
     const isFollowup = topic.endsWith('_followup');
