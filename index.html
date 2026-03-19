@@ -1,154 +1,938 @@
-export async function GET() {
-  return new Response('chat endpoint is live', { status: 200 });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Clinical Simulation — Parkinson's Disease History Taking</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --red: #af2626;
+  --red-light: rgba(175,38,38,0.07);
+  --red-border: rgba(175,38,38,0.2);
+  --white: #ffffff;
+  --off-white: #efefeb;
+  --light-gray: #ededed;
+  --text-primary: #333333;
+  --text-secondary: #666660;
+  --text-muted: #acaca3;
+  --border: #deded7;
+  --sidebar-bg: #efefeb;
+  --main-bg: #ffffff;
+  --amber: #b8920a;
+  --amber-light: rgba(184,146,10,0.08);
+  --amber-border: rgba(184,146,10,0.25);
+  --green: #2a7a3b;
+  --green-light: rgba(42,122,59,0.07);
+  --green-border: rgba(42,122,59,0.22);
 }
 
-export async function POST(request) {
-  try {
-    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
 
-    if (!ANTHROPIC_API_KEY) {
-      return Response.json(
-        { error: 'API key not configured on server.' },
-        { status: 500 }
-      );
-    }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--off-white);
+  color: var(--text-primary);
+  display: flex; align-items: stretch; overflow: hidden;
+}
 
-    const { userMessage } = await request.json();
+.layout {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  width: 100%; height: 100vh; min-height: 0; overflow: hidden;
+}
 
-    const text = userMessage.toLowerCase().trim();
+/* SIDEBAR */
+.sidebar {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  padding: 1.25rem 1.1rem;
+  display: flex; flex-direction: column; gap: 1.25rem;
+  overflow-y: auto; height: 100vh;
+}
 
-    // 1. HARD SHORTCUTS — exact matches bypassing the model entirely
-    if (
-      text === "hi" ||
-      text === "hello" ||
-      text === "hey" ||
-      text === "good morning" ||
-      text === "good afternoon" ||
-      text === "how are you" ||
-      text === "how are you feeling"
-    ) {
-      return Response.json({ topic: "early_symptoms" });
-    }
+.module-label {
+  font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--red); font-weight: 500;
+}
 
-    if (
-      text === "ok" ||
-      text === "okay" ||
-      text === "cool" ||
-      text === "right" ||
-      text === "i see" ||
-      text === "got it"
-    ) {
-      return Response.json({ topic: "vague" });
-    }
+.module-sub {
+  font-size: 12px; color: var(--text-secondary);
+  margin-top: 3px; font-style: italic;
+  font-family: 'DM Serif Display', serif;
+}
 
-    // 2. AI CLASSIFICATION
-    const SYSTEM_PROMPT = `
-You are a classifier for a Parkinson's disease clinical history-taking simulation.
-A clinician is interviewing a patient named John. Classify the clinician's message into exactly one topic.
+.patient-card {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
 
-Return ONLY valid JSON with no explanation, no markdown, no preamble:
-{"topic":"key"}
+.patient-avatar-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 0.75rem; }
 
-TOPICS AND WHAT THEY COVER:
-- early_symptoms: tremor, slowness, stiffness, rigidity, general opening questions about what's wrong or what brought the patient in
-- early_symptoms_followup: facial expression (masked facies), quiet or soft voice, hypophonia
-- onset: when symptoms first started, age at onset, how long ago it began, first noticing something was wrong
-- onset_followup: symptoms that came before the tremor (e.g. shoulder stiffness, smell changes, constipation before motor symptoms)
-- progression: how symptoms have changed or worsened over time, whether it's gradual or sudden
-- progression_followup: freezing of gait, festination, getting stuck when walking or in doorways
-- family: family history of Parkinson's, tremor, or neurological disease in parents or siblings
-- family_followup: extended family — grandparents, aunts, uncles, cousins
-- drugs: current medications, what the patient is currently taking
-- drugs_followup: past medications, previous use of dopamine blockers, metoclopramide, antipsychotics, anti-sickness drugs
-- rbd: sleep behaviour — acting out dreams, moving or shouting during sleep, REM sleep behaviour disorder
-- rbd_followup: how long sleep issues have been present, duration of RBD symptoms, questions about dreaming, vivid or active dreams
-- neuro: mood (depression, anxiety), memory, cognitive changes, hallucinations
-- neuro_followup: vivid dreams, slowed thinking, mild cognitive impairment
-- autonomic: dizziness on standing, constipation, urinary symptoms, bowel or bladder issues
-- autonomic_followup: fainting, syncope, near-blackouts
-- vague: no clinical intent — acknowledgements, affirmations, filler words only
-- fallback: genuinely unrelated to Parkinson's history-taking (e.g. asking about the weather, unrelated medical topics)
+.patient-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--red);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'DM Serif Display', serif;
+  font-size: 14px; color: var(--white); flex-shrink: 0;
+}
 
-CLASSIFICATION RULES:
-- LEAN TOWARD A MATCH. Only use fallback if the message has no plausible connection to any topic above.
-- fallback should be rare. If there is any reasonable clinical interpretation, choose that topic instead.
-- vague is only for messages with zero clinical content (e.g. "sure", "thanks", "interesting").
-- Indirect, colloquial, or imperfect phrasing should still be matched — clinicians don't always ask textbook questions.
+.patient-name { font-family: 'DM Serif Display', serif; font-size: 16px; color: var(--text-primary); line-height: 1.2; }
+.patient-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.patient-details { display: flex; flex-direction: column; gap: 5px; }
+.detail-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+.detail-label { color: var(--text-muted); }
+.detail-value { color: var(--text-secondary); font-weight: 500; }
+.divider { height: 1px; background: var(--border); margin: 0.15rem 0; }
 
-EXAMPLES OF TRICKY CASES THAT SHOULD MATCH (not fallback):
-- "Has anything changed since this all started?" → progression
-- "Any issues sleeping?" → rbd
-- "Do you have relatives with similar problems?" → family_followup
-- "What about other relatives?" → family_followup
-- "Are you on anything at the moment?" → drugs
-- "Any other medications? Anything in the past?" → drugs_followup
-- "Have you ever taken anything for nausea or sickness?" → drugs_followup
-- "Have you noticed anything with your balance or walking?" → progression_followup
-- "Any bowel changes?" → autonomic
-- "How's your mood been?" → neuro
-- "Did anyone else in the family ever have a tremor?" → family
-- "Was there anything before the shaking started?" → onset_followup
-- "Any dizziness when you stand up?" → autonomic
-- "Do you ever feel faint?" → autonomic_followup
-- "Has your handwriting changed?" → early_symptoms
-- "Any issues with your sense of smell?" → onset_followup
-- "Do you take any regular tablets?" → drugs
-- "Are you having any dreams?" → rbd_followup
-- "Do you dream a lot?" → rbd_followup
-- "Been having those sleep issues long?" → rbd_followup
-- "How long has the sleep thing been going on?" → rbd_followup
+/* Progress */
+.progress-section { display: flex; flex-direction: column; gap: 8px; }
+.progress-header { display: flex; justify-content: space-between; align-items: baseline; }
+.progress-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); font-weight: 500; }
+.progress-pct { font-size: 20px; font-weight: 300; color: var(--red); font-family: 'DM Serif Display', serif; }
+.progress-track { height: 3px; background: var(--light-gray); border-radius: 2px; overflow: hidden; }
+.progress-bar { height: 100%; background: var(--red); border-radius: 2px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); width: 0%; }
 
-Respond ONLY with:
-{"topic":"key"}
-`;
+/* Topic list */
+.topics-list { display: flex; flex-direction: column; gap: 4px; }
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 50,
-        system: SYSTEM_PROMPT,
-        messages: [
-          { role: 'user', content: userMessage }
-        ]
-      })
-    });
+.topic-item {
+  display: flex; flex-direction: column;
+  padding: 0; border-radius: 8px; font-size: 11px;
+  border: 1px solid transparent; transition: all 0.25s;
+}
+.topic-item .topic-inner {
+  display: none;
+  padding: 7px 9px;
+}
 
-    const data = await res.json();
+/* Hint button state */
+.hint-btn {
+  width: 100%; padding: 6px 9px;
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 11px; color: var(--text-muted);
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+  text-align: left; transition: all 0.18s;
+  display: flex; align-items: center; gap: 7px;
+}
+.hint-btn:hover { border-color: var(--red-border); color: var(--red); background: var(--red-light); }
+.hint-btn .hint-label { flex: 1; }
+.hint-btn.revealed { color: var(--text-secondary); font-style: italic; border-color: var(--border); }
+.hint-btn.hint-btn-followup {
+  margin-top: 3px;
+  opacity: 0.75;
+  font-style: italic;
+  display: none;
+}
+.hint-btn.revealed ~ .hint-btn-followup { display: flex; }
+.hint-btn.hint-btn-followup:hover { opacity: 1; }
+.topic-item.full .hint-btn-followup { display: none; }
 
-    if (data.error) {
-      return Response.json(
-        { error: data.error.message || 'Anthropic request failed' },
-        { status: 500 }
-      );
-    }
+/* Partial — amber */
+.topic-item.partial {
+  border-color: var(--amber-border);
+  background: var(--amber-light);
+  animation: revealTopic 0.35s ease;
+}
+.topic-item.partial .topic-inner {
+  display: flex;
+  color: var(--amber);
+}
+.topic-item.partial .hint-btn { display: none; }
 
-    let parsed = { topic: 'fallback' };
+/* Full — green */
+.topic-item.full {
+  border-color: var(--green-border);
+  background: var(--green-light);
+  animation: revealTopic 0.35s ease;
+}
+.topic-item.full .topic-inner {
+  display: flex;
+  color: var(--green);
+}
+.topic-item.full .hint-btn { display: none; }
 
-    try {
-      let raw = data.content[0].text.trim();
-      raw = raw
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
+@keyframes revealTopic {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      parsed = { topic: 'fallback' };
-    }
+.topic-row { display: flex; align-items: center; gap: 7px; }
+.topic-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.topic-item.partial .topic-dot { background: var(--amber); }
+.topic-item.full .topic-dot { background: var(--green); }
 
-    return Response.json(parsed);
+.topic-name { flex: 1; font-weight: 500; }
+.topic-badge {
+  font-size: 9px; padding: 1px 6px; border-radius: 10px;
+  font-weight: 500; white-space: nowrap;
+}
+.topic-item.partial .topic-badge { background: var(--amber-light); color: var(--amber); border: 1px solid var(--amber-border); }
+.topic-item.full .topic-badge { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
 
-  } catch (err) {
-    return Response.json(
-      { error: err.message || 'Server error' },
-      { status: 500 }
-    );
+/* Review button */
+.review-btn-wrap {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  margin-top: auto;
+}
+.review-btn {
+  width: 100%; padding: 8px 12px;
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 12px; color: var(--text-secondary);
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+  text-align: left; transition: all 0.18s;
+  display: flex; align-items: center; gap: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.review-btn:hover { border-color: var(--red-border); color: var(--red); background: var(--red-light); }
+
+/* Review panel */
+.review-panel {
+  display: none; position: absolute;
+  top: 0; left: 248px; right: 0; bottom: 0;
+  background: var(--off-white); z-index: 10;
+  flex-direction: column; overflow: hidden;
+  border-left: 3px solid var(--red);
+}
+.review-panel.open { display: flex; }
+
+.review-header {
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  background: var(--white);
+}
+.review-title { font-family: 'DM Serif Display', serif; font-size: 18px; color: var(--text-primary); }
+.close-btn {
+  background: var(--light-gray); border: none; border-radius: 6px;
+  padding: 6px 12px; font-size: 12px; color: var(--text-secondary);
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+}
+.close-btn:hover { background: var(--border); }
+
+.review-body { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 12px; }
+
+.review-item {
+  background: var(--off-white); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.review-item-label {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 500; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;
+}
+.review-item-label.partial { color: var(--amber); }
+.review-item-label.full { color: var(--green); }
+.review-item-status {
+  font-size: 9px; padding: 1px 6px; border-radius: 10px; font-weight: 500;
+}
+.partial .review-item-status { background: var(--amber-light); color: var(--amber); border: 1px solid var(--amber-border); }
+.full .review-item-status { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
+
+.review-item-text { font-size: 13px; color: var(--text-primary); line-height: 1.6; }
+.review-item-text + .review-item-text { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.review-empty { font-size: 13px; color: var(--text-muted); padding: 1rem 0; }
+
+/* MAIN */
+.main {
+  display: flex; flex-direction: column;
+  background: var(--main-bg);
+  height: 100vh; overflow: hidden; position: relative;
+}
+
+.main-header {
+  padding: 1.1rem 1.5rem 0.9rem; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0;
+}
+.main-title { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--text-primary); line-height: 1.2; }
+.main-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+.status-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--red-light); border: 1px solid var(--red-border);
+  border-radius: 20px; padding: 4px 10px;
+  font-size: 11px; color: var(--red); font-weight: 500; white-space: nowrap;
+}
+.status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--red); animation: pulse 2s infinite; }
+
+@keyframes pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* Chat */
+.chat-area {
+  flex: 1; overflow-y: auto;
+  padding: 1.1rem 1.5rem;
+  display: flex; flex-direction: column; gap: 0.9rem;
+  scroll-behavior: smooth; min-height: 0;
+}
+.chat-area::-webkit-scrollbar { width: 4px; }
+.chat-area::-webkit-scrollbar-track { background: transparent; }
+.chat-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.msg { display: flex; gap: 10px; align-items: flex-start; max-width: 80%; }
+.msg.patient { align-self: flex-start; }
+.msg.clinician { align-self: flex-end; flex-direction: row-reverse; }
+
+.msg-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 500; flex-shrink: 0;
+  font-family: 'DM Serif Display', serif;
+}
+.msg.patient .msg-avatar { background: var(--red); color: var(--white); }
+.msg.clinician .msg-avatar { background: var(--light-gray); color: var(--text-secondary); border: 1px solid var(--border); }
+
+.msg-content { display: flex; flex-direction: column; gap: 3px; }
+.msg-bubble { padding: 9px 13px; font-size: 13px; line-height: 1.6; }
+.msg.patient .msg-bubble { background: var(--off-white); border: 1px solid var(--border); color: var(--text-primary); border-radius: 3px 12px 12px 12px; }
+.msg.clinician .msg-bubble { background: var(--red); color: var(--white); border-radius: 12px 3px 12px 12px; }
+.msg-meta { font-size: 10px; color: var(--text-muted); padding: 0 2px; }
+.msg.clinician .msg-meta { text-align: right; }
+
+.typing-wrap { display: flex; gap: 10px; align-items: flex-start; }
+.typing-bubble {
+  background: var(--off-white); border: 1px solid var(--border);
+  border-radius: 3px 12px 12px 12px;
+  padding: 12px 16px; display: flex; gap: 4px; align-items: center;
+}
+.typing-bubble span { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); animation: blink 1.3s infinite; }
+.typing-bubble span:nth-child(2) { animation-delay: 0.18s; }
+.typing-bubble span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes blink { 0%,60%,100%{opacity:0.25} 30%{opacity:1} }
+
+/* Bottom */
+.bottom-section { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--white); overflow: hidden; }
+
+.feedback-area { padding: 0.65rem 1.5rem; border-bottom: 1px solid var(--border); display: none; }
+.feedback-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--red); font-weight: 500; margin-bottom: 3px; }
+.feedback-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+.nudge-area {
+  padding: 0.6rem 1.5rem; border-bottom: 1px solid var(--border);
+  display: none; align-items: center; justify-content: space-between; gap: 12px;
+}
+.nudge-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); font-weight: 500; margin-bottom: 2px; }
+.nudge-text { font-size: 12px; color: #7a5f0a; }
+.hint-text { font-size: 12px; color: #7a5f0a; margin-top: 4px; display: none; }
+.reveal-hint-btn {
+  background: var(--amber-light); border: 1px solid var(--amber-border);
+  border-radius: 6px; padding: 5px 10px;
+  font-size: 11px; color: var(--amber); cursor: pointer;
+  font-family: 'DM Sans', sans-serif; white-space: nowrap; flex-shrink: 0;
+}
+.reveal-hint-btn:hover { background: rgba(184,146,10,0.14); }
+
+.complete-banner {
+  padding: 0.6rem 1.5rem; background: var(--green-light);
+  border-bottom: 1px solid var(--green-border);
+  font-size: 12px; color: var(--green); line-height: 1.5; display: none;
+}
+.complete-banner strong { font-weight: 500; }
+
+.input-area { padding: 0.75rem 1.5rem; display: flex; gap: 8px; align-items: flex-end; }
+.input-area textarea {
+  flex: 1; background: var(--off-white); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 13px; font-size: 13px;
+  font-family: 'DM Sans', sans-serif; color: var(--text-primary);
+  resize: none; height: 44px; outline: none; transition: border-color 0.2s;
+}
+.input-area textarea::placeholder { color: var(--text-muted); }
+.input-area textarea:focus { border-color: var(--red-border); background: var(--white); }
+
+.send-btn {
+  background: var(--red); color: var(--white); border: none;
+  border-radius: 10px; width: 44px; height: 44px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 15px; transition: opacity 0.2s, transform 0.1s;
+}
+.send-btn:hover:not(:disabled) { opacity: 0.85; }
+.send-btn:active:not(:disabled) { transform: scale(0.95); }
+.send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+@media (max-width: 680px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .review-panel { left: 0; }
+}
+
+/* Disclaimer modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1.5rem;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: var(--white); border-radius: 14px;
+  max-width: 520px; width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  overflow: hidden;
+}
+.modal-header {
+  background: var(--red); padding: 1.1rem 1.4rem;
+}
+.modal-header-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 17px; color: var(--white); line-height: 1.2;
+}
+.modal-header-sub {
+  font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 3px;
+}
+.modal-body { padding: 1.4rem 1.4rem 0.6rem; }
+.modal-body p {
+  font-size: 13px; color: var(--text-secondary);
+  line-height: 1.75; margin-bottom: 0.85rem;
+}
+.modal-body p:last-of-type { margin-bottom: 0; }
+.modal-body a { color: var(--red); text-decoration: none; }
+.modal-body a:hover { text-decoration: underline; }
+.modal-footer {
+  padding: 1rem 1.4rem 1.3rem;
+  display: flex; justify-content: flex-end;
+}
+.modal-confirm-btn {
+  background: var(--red); color: var(--white); border: none;
+  border-radius: 8px; padding: 9px 22px;
+  font-size: 13px; font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer; transition: opacity 0.18s;
+}
+.modal-confirm-btn:hover { opacity: 0.88; }
+</style>
+</head>
+<body>
+
+<!-- Disclaimer modal -->
+<div class="modal-overlay" id="disclaimer-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-header-title">Before You Begin</div>
+      <div class="modal-header-sub">Clinical Simulation — Parkinson's Disease History Taking</div>
+    </div>
+    <div class="modal-body">
+      <p>This learning activity is designed to help you practise recalling key information relevant to taking a patient history. It focuses on recognising the words and phrases identified as clinically important by the course authors.</p>
+      <p>Please be aware that this simulation does not perfectly replicate a real clinical conversation. While the questions or statements you enter may be entirely appropriate, the system may not always interpret them correctly. This is an inherent limitation of the format rather than a reflection of your clinical communication.</p>
+      <p>If you find yourself stuck at any point, use the <strong>hint buttons</strong> on the left to reveal the topics covered in this module.</p>
+      <p>For questions or concerns, please contact <a href="mailto:education@mds.org">education@mds.org</a>.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-confirm-btn" onclick="dismissDisclaimer()">I understand — begin simulation</button>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div>
+      <div class="module-label">Clinical Simulation</div>
+      <div class="module-sub">Parkinson's Disease — History Taking</div>
+    </div>
+
+    <div class="patient-card">
+      <div class="patient-avatar-wrap">
+        <div class="patient-avatar">JS</div>
+        <div>
+          <div class="patient-name">John Smith</div>
+          <div class="patient-sub">68 years old · Male</div>
+        </div>
+      </div>
+      <div class="patient-details">
+        <div class="detail-row"><span class="detail-label">Referral</span><span class="detail-value">GP → Neurology</span></div>
+        <div class="divider"></div>
+        <div class="detail-row"><span class="detail-label">Chief complaint</span><span class="detail-value">Right hand tremor</span></div>
+        <div class="detail-row"><span class="detail-label">Duration</span><span class="detail-value">~14 months</span></div>
+        <div class="detail-row"><span class="detail-label">Occupation</span><span class="detail-value">Retired engineer</span></div>
+      </div>
+    </div>
+
+    <div class="progress-section">
+      <div class="progress-header">
+        <span class="progress-title">History coverage</span>
+        <span class="progress-pct" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+    </div>
+
+    <div>
+      <div class="progress-title" style="margin-bottom:8px;">Domains explored</div>
+      <div class="topics-list">
+        <div class="topic-item" id="chip-early_symptoms">
+          <button class="hint-btn" id="hint-early_symptoms" onclick="revealHintBtn('early_symptoms')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-early_symptoms_followup" onclick="revealHintBtn('early_symptoms_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Early symptoms</span><span class="topic-badge" id="badge-early_symptoms">more to explore</span></div>
+        </div>
+        <div class="topic-item" id="chip-onset">
+          <button class="hint-btn" id="hint-onset" onclick="revealHintBtn('onset')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-onset_followup" onclick="revealHintBtn('onset_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Age of onset</span><span class="topic-badge" id="badge-onset">more to explore</span></div>
+        </div>
+        <div class="topic-item" id="chip-progression">
+          <button class="hint-btn" id="hint-progression" onclick="revealHintBtn('progression')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-progression_followup" onclick="revealHintBtn('progression_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Symptom progression</span><span class="topic-badge" id="badge-progression">more to explore</span></div>
+        </div>
+        <div class="topic-item" id="chip-family">
+          <button class="hint-btn" id="hint-family" onclick="revealHintBtn('family')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-family_followup" onclick="revealHintBtn('family_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Family history</span><span class="topic-badge" id="badge-family">more to explore</span></div>
+        </div>
+        <div class="topic-item" id="chip-drugs">
+          <button class="hint-btn" id="hint-drugs" onclick="revealHintBtn('drugs')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-drugs_followup" onclick="revealHintBtn('drugs_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Drug history</span><span class="topic-badge" id="badge-drugs">more to explore</span></div>
+        </div>
+        <div class="topic-item" id="chip-rbd">
+          <button class="hint-btn" id="hint-rbd" onclick="revealHintBtn('rbd')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-rbd_followup" onclick="revealHintBtn('rbd_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">REM sleep / RBD</span><span class="topic-badge" id="badge-rbd">more to explore</span></div>
+        </div>
+        <div class="topic-item" id="chip-neuro">
+          <button class="hint-btn" id="hint-neuro" onclick="revealHintBtn('neuro')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-neuro_followup" onclick="revealHintBtn('neuro_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Neuropsychiatry</span><span class="topic-badge" id="badge-neuro">more to explore</span></div>
+        </div>
+        <div class="topic-item" id="chip-autonomic">
+          <button class="hint-btn" id="hint-autonomic" onclick="revealHintBtn('autonomic')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-autonomic_followup" onclick="revealHintBtn('autonomic_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
+          <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Autonomic dysfunction</span><span class="topic-badge" id="badge-autonomic">more to explore</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="review-btn-wrap">
+      <button class="review-btn" onclick="openReview()">
+        <span>📋</span> Review patient history
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Review panel overlay -->
+    <div class="review-panel" id="review-panel">
+      <div class="review-header">
+        <div class="review-title">John's history so far</div>
+        <button class="close-btn" onclick="closeReview()">Close ✕</button>
+      </div>
+      <div class="review-body" id="review-body"></div>
+    </div>
+
+    <div class="main-header">
+      <div>
+        <div class="main-title">Patient Interview</div>
+        <div class="main-subtitle">Take a full history. Ask John about his symptoms in your own words.</div>
+      </div>
+      <div class="status-pill"><span class="status-dot"></span>Simulation active</div>
+    </div>
+
+    <div class="chat-area" id="chat-area"></div>
+
+    <div class="bottom-section">
+      <div class="complete-banner" id="complete-banner">
+        <strong>Full history taken.</strong> All 8 domains have been fully explored — well done.
+      </div>
+
+      <div class="feedback-area" id="feedback-area">
+        <div class="feedback-label">Clinical feedback</div>
+        <div class="feedback-text" id="feedback-text"></div>
+      </div>
+
+      <div class="nudge-area" id="nudge-area">
+        <div>
+          <div class="nudge-label">Off topic</div>
+          <div class="nudge-text">John isn't sure how to answer that.</div>
+          <div class="hint-text" id="hint-text">Try asking about: symptoms, when they started, medications, sleep, family history, or how things have progressed.</div>
+        </div>
+        <button class="reveal-hint-btn" id="reveal-hint-btn" onclick="revealHint()">Show hint</button>
+      </div>
+
+      <div class="input-area">
+        <textarea id="user-input" placeholder="Ask John a question..." onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send">&#10148;</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const PROXY_URL = '/api/chat';
+
+const RESPONSES = {
+  early_symptoms: "It started with a slight tremor in my right hand. At first it was just every now and then, but over time it's become more noticeable. I've also felt a bit slower doing simple things.",
+  early_symptoms_followup: "My wife says my face looks a bit more serious lately, and people ask me to repeat myself sometimes because my voice seems quieter than it used to be.",
+  onset: "I first noticed the tremor about 14 months ago. I was 67 at the time, and it seemed subtle at first.",
+  onset_followup: "Thinking back, I did have some stiffness in my right shoulder before the tremor really became obvious. I just thought it was part of getting older.",
+  progression: "It has come on gradually rather than all at once. The tremor is more frequent now, and I feel slower than I used to, but it hasn't suddenly changed.",
+  progression_followup: "I don't really get stuck in doorways, but every now and then it feels like my feet hesitate for a moment before I get going.",
+  family: "Not that I know of. My parents never had Parkinson's, and I don't remember anyone in the family having a tremor like this.",
+  family_followup: "I can't think of any aunts, uncles, or other relatives with similar problems either.",
+  drugs: "At the moment I just take medication for blood pressure and cholesterol. Nothing specifically for this tremor yet.",
+  drugs_followup: "I've never taken anything like metoclopramide or other anti-sickness medicines for long periods, and I haven't been on any major neurological medications before.",
+  rbd: "My wife has mentioned that I sometimes jerk in my sleep and occasionally talk or shout during dreams. I wasn't very aware of it myself.",
+  rbd_followup: "She says it's been going on for at least a couple of years, maybe longer.",
+  neuro: "My mood has been mostly okay, though I do feel a bit frustrated by all of this. I haven't had hallucinations or anything like that, and my memory seems mostly fine.",
+  neuro_followup: "I do have some vivid dreams sometimes, and maybe I'm a little slower in my thinking than I used to be, but nothing dramatic.",
+  autonomic: "I do get constipated more than I used to, and sometimes I feel a bit lightheaded when I stand up too quickly.",
+  autonomic_followup: "I've never fully blacked out, but there have been a few moments where I felt close to fainting when I stood up fast.",
+  vague: "Could you be a little more specific about what you'd like to know?",
+  fallback: "I'm not really sure how that relates to what's been going on with me."
+};
+
+const TOPIC_ORDER = [
+  'early_symptoms',
+  'onset',
+  'progression',
+  'family',
+  'drugs',
+  'rbd',
+  'neuro',
+  'autonomic'
+];
+
+const FOLLOWUP_MAP = {
+  early_symptoms_followup: 'early_symptoms',
+  onset_followup: 'onset',
+  progression_followup: 'progression',
+  family_followup: 'family',
+  drugs_followup: 'drugs',
+  rbd_followup: 'rbd',
+  neuro_followup: 'neuro',
+  autonomic_followup: 'autonomic'
+};
+
+const TOPIC_LABELS = {
+  early_symptoms: 'Early symptoms',
+  early_symptoms_followup: 'Early symptoms — facial expression & voice',
+  onset: 'Age of onset',
+  onset_followup: 'Onset — symptoms before the tremor',
+  progression: 'Symptom progression',
+  progression_followup: 'Progression — freezing of gait',
+  family: 'Family history',
+  family_followup: 'Family history — extended relatives',
+  drugs: 'Drug history',
+  drugs_followup: 'Drug history — past & dopamine blockers',
+  rbd: 'REM sleep / RBD',
+  rbd_followup: 'REM sleep — duration of symptoms',
+  neuro: 'Neuropsychiatry',
+  neuro_followup: 'Neuropsychiatry — vivid dreams & thinking',
+  autonomic: 'Autonomic dysfunction',
+  autonomic_followup: 'Autonomic — fainting'
+};
+
+const topicState = {};
+const reviewState = {};
+const topicAskCount = {}; // tracks asks per full topic key (incl. _followup)
+
+TOPIC_ORDER.forEach(topic => {
+  topicState[topic] = { partial: false, full: false };
+  reviewState[topic] = [];
+  topicAskCount[topic] = 0;
+  topicAskCount[topic + '_followup'] = 0;
+});
+
+function normalizeTopic(topic) {
+  if (TOPIC_ORDER.includes(topic)) return topic;
+  if (FOLLOWUP_MAP[topic]) return FOLLOWUP_MAP[topic];
+  return topic;
+}
+
+function addMessage(role, text) {
+  const chat = document.getElementById('chat-area');
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.textContent = role === 'patient' ? 'JS' : 'You';
+
+  const content = document.createElement('div');
+  content.className = 'msg-content';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = role === 'patient' ? 'John Smith' : 'Clinician';
+
+  content.appendChild(bubble);
+  content.appendChild(meta);
+
+  msg.appendChild(avatar);
+  msg.appendChild(content);
+
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function showTyping() {
+  const chat = document.getElementById('chat-area');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'typing-wrap';
+  wrap.id = 'typing-indicator';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.style.background = 'var(--red)';
+  avatar.style.color = 'white';
+  avatar.textContent = 'JS';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'typing-bubble';
+  bubble.innerHTML = '<span></span><span></span><span></span>';
+
+  wrap.appendChild(avatar);
+  wrap.appendChild(bubble);
+  chat.appendChild(wrap);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function hideTyping() {
+  const typing = document.getElementById('typing-indicator');
+  if (typing) typing.remove();
+}
+
+function showFeedback(text) {
+  const area = document.getElementById('feedback-area');
+  const el = document.getElementById('feedback-text');
+  if (!text) {
+    area.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  el.textContent = text;
+  area.style.display = 'block';
+}
+
+function showNudge(show) {
+  document.getElementById('nudge-area').style.display = show ? 'flex' : 'none';
+  if (!show) {
+    document.getElementById('hint-text').style.display = 'none';
   }
 }
+
+function revealHint() {
+  document.getElementById('hint-text').style.display = 'block';
+}
+
+function dismissDisclaimer() {
+  document.getElementById('disclaimer-modal').classList.add('hidden');
+}
+
+function revealHintBtn(topic) {
+  const btn = document.getElementById(`hint-${topic}`);
+  if (!btn || btn.classList.contains('revealed')) return;
+  btn.classList.add('revealed');
+  const label = btn.querySelector('.hint-label');
+  if (label) label.textContent = `Ask about ${TOPIC_LABELS[topic]}`;
+}
+
+function markTopic(topic, isFollowup) {
+  const chip = document.getElementById(`chip-${topic}`);
+  const badge = document.getElementById(`badge-${topic}`);
+  if (!chip || !badge) return;
+
+  if (isFollowup) {
+    topicState[topic].partial = true;
+    topicState[topic].full = true;
+    chip.classList.remove('partial');
+    chip.classList.add('full');
+    badge.textContent = 'covered';
+  } else {
+    if (!topicState[topic].partial) {
+      topicState[topic].partial = true;
+      chip.classList.add('partial');
+      badge.textContent = 'more to explore';
+    }
+  }
+
+  updateProgress();
+  updateCompleteBanner();
+}
+
+function updateProgress() {
+  let score = 0;
+  TOPIC_ORDER.forEach(topic => {
+    if (topicState[topic].full) {
+      score += 1;
+    } else if (topicState[topic].partial) {
+      score += 0.5;
+    }
+  });
+
+  const pct = Math.round((score / TOPIC_ORDER.length) * 100);
+  document.getElementById('progress-pct').textContent = `${pct}%`;
+  document.getElementById('progress-bar').style.width = `${pct}%`;
+}
+
+function updateCompleteBanner() {
+  const allFull = TOPIC_ORDER.every(topic => topicState[topic].full);
+  document.getElementById('complete-banner').style.display = allFull ? 'block' : 'none';
+}
+
+function recordReview(topic, clinicianQuestion, patientResponse, status) {
+  if (!TOPIC_ORDER.includes(topic)) return;
+
+  reviewState[topic].push({
+    question: clinicianQuestion,
+    response: patientResponse,
+    status
+  });
+}
+
+function openReview() {
+  const panel = document.getElementById('review-panel');
+  const body = document.getElementById('review-body');
+  body.innerHTML = '';
+
+  let hasContent = false;
+
+  TOPIC_ORDER.forEach(topic => {
+    const entries = reviewState[topic];
+    if (!entries.length) return;
+    hasContent = true;
+
+    const isFull = topicState[topic].full;
+    const item = document.createElement('div');
+    item.className = 'review-item';
+
+    const label = document.createElement('div');
+    label.className = `review-item-label ${isFull ? 'full' : 'partial'}`;
+    label.innerHTML = `
+      <span>${TOPIC_LABELS[topic]}</span>
+      <span class="review-item-status">${isFull ? 'covered' : 'partial'}</span>
+    `;
+
+    item.appendChild(label);
+
+    entries.forEach(entry => {
+      const text = document.createElement('div');
+      text.className = 'review-item-text';
+      text.innerHTML = `<strong>You asked:</strong> ${entry.question}<br><strong>John said:</strong> ${entry.response}`;
+      item.appendChild(text);
+    });
+
+    body.appendChild(item);
+  });
+
+  if (!hasContent) {
+    const empty = document.createElement('div');
+    empty.className = 'review-empty';
+    empty.textContent = 'No history captured yet.';
+    body.appendChild(empty);
+  }
+
+  panel.classList.add('open');
+}
+
+function closeReview() {
+  document.getElementById('review-panel').classList.remove('open');
+}
+
+async function sendMessage() {
+  const input = document.getElementById('user-input');
+  const btn = document.getElementById('send-btn');
+  const text = input.value.trim();
+
+  if (!text) return;
+
+  addMessage('clinician', text);
+  input.value = '';
+  btn.disabled = true;
+  showTyping();
+  showNudge(false);
+
+  try {
+    const response = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userMessage: text })
+    });
+
+    const data = await response.json();
+    hideTyping();
+
+    if (!response.ok) {
+      addMessage('patient', data.error || 'Something went wrong.');
+      return;
+    }
+
+    const topic = data.topic || 'fallback';
+    const feedback = data.feedback || '';
+
+    if (topic === 'fallback' || topic === 'vague') {
+      addMessage('patient', RESPONSES[topic] || RESPONSES.fallback);
+      showFeedback(feedback);
+      showNudge(true);
+      return;
+    }
+
+    // Increment ask count for this specific topic key
+    if (topicAskCount[topic] !== undefined) {
+      topicAskCount[topic]++;
+    } else {
+      topicAskCount[topic] = 1;
+    }
+
+    const count = topicAskCount[topic];
+    const baseResponse = RESPONSES[topic] || RESPONSES.fallback;
+
+    let patientReply;
+    if (count === 1) {
+      patientReply = baseResponse;
+    } else if (count === 2) {
+      const lowerResponse = baseResponse.charAt(0).toLowerCase() + baseResponse.slice(1);
+      patientReply = `As I mentioned — ${lowerResponse} Did you mean something else?`;
+    } else {
+      patientReply = `I think we've already covered that. Perhaps there's another area you'd like to ask about?`;
+    }
+
+    addMessage('patient', patientReply);
+    showFeedback(feedback);
+
+    const baseTopic = normalizeTopic(topic);
+    const isFollowup = topic.endsWith('_followup');
+
+    markTopic(baseTopic, isFollowup);
+    recordReview(
+      baseTopic,
+      text,
+      patientReply,
+      isFollowup ? 'full' : 'partial'
+    );
+  } catch (error) {
+    hideTyping();
+    console.error(error);
+    addMessage('patient', 'Error connecting to server.');
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+function handleKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+}
+
+window.onload = function () {
+  setTimeout(() => {
+    addMessage(
+      'patient',
+      "Good morning. I'm John. I've been having some shaking in my right hand, and my GP thought I should come in and get it checked out."
+    );
+  }, 300);
+};
+</script></body>
+</html>
