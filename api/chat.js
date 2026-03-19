@@ -61,7 +61,7 @@ TOPICS AND WHAT THEY COVER:
 - drugs: current medications, what the patient is currently taking
 - drugs_followup: past medications, previous use of dopamine blockers, metoclopramide, antipsychotics, anti-sickness drugs
 - rbd: sleep behaviour — acting out dreams, moving or shouting during sleep, REM sleep behaviour disorder
-- rbd_followup: how long sleep issues have been present, duration of RBD symptoms
+- rbd_followup: how long sleep issues have been present, duration of RBD symptoms, questions about dreaming, vivid or active dreams
 - neuro: mood (depression, anxiety), memory, cognitive changes, hallucinations
 - neuro_followup: vivid dreams, slowed thinking, mild cognitive impairment
 - autonomic: dizziness on standing, constipation, urinary symptoms, bowel or bladder issues
@@ -78,8 +78,11 @@ CLASSIFICATION RULES:
 EXAMPLES OF TRICKY CASES THAT SHOULD MATCH (not fallback):
 - "Has anything changed since this all started?" → progression
 - "Any issues sleeping?" → rbd
-- "Do you have relatives with similar problems?" → family
+- "Do you have relatives with similar problems?" → family_followup
+- "What about other relatives?" → family_followup
 - "Are you on anything at the moment?" → drugs
+- "Any other medications? Anything in the past?" → drugs_followup
+- "Have you ever taken anything for nausea or sickness?" → drugs_followup
 - "Have you noticed anything with your balance or walking?" → progression_followup
 - "Any bowel changes?" → autonomic
 - "How's your mood been?" → neuro
@@ -90,6 +93,10 @@ EXAMPLES OF TRICKY CASES THAT SHOULD MATCH (not fallback):
 - "Has your handwriting changed?" → early_symptoms
 - "Any issues with your sense of smell?" → onset_followup
 - "Do you take any regular tablets?" → drugs
+- "Are you having any dreams?" → rbd_followup
+- "Do you dream a lot?" → rbd_followup
+- "Been having those sleep issues long?" → rbd_followup
+- "How long has the sleep thing been going on?" → rbd_followup
 
 Respond ONLY with:
 {"topic":"key"}
