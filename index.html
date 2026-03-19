@@ -120,7 +120,13 @@ body {
 .hint-btn:hover { border-color: var(--red-border); color: var(--red); background: var(--red-light); }
 .hint-btn .hint-label { flex: 1; }
 .hint-btn.revealed { color: var(--text-secondary); font-style: italic; border-color: var(--border); }
-.hint-btn.hidden-by-coverage { display: none; }
+.hint-btn.hint-btn-followup {
+  margin-top: 3px;
+  opacity: 0.75;
+  font-style: italic;
+}
+.hint-btn.hint-btn-followup:hover { opacity: 1; }
+.topic-item.full .hint-btn-followup { display: none; }
 
 /* Partial — amber */
 .topic-item.partial {
@@ -456,34 +462,42 @@ body {
       <div class="topics-list">
         <div class="topic-item" id="chip-early_symptoms">
           <button class="hint-btn" id="hint-early_symptoms" onclick="revealHintBtn('early_symptoms')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-early_symptoms_followup" onclick="revealHintBtn('early_symptoms_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Early symptoms</span><span class="topic-badge" id="badge-early_symptoms">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-onset">
           <button class="hint-btn" id="hint-onset" onclick="revealHintBtn('onset')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-onset_followup" onclick="revealHintBtn('onset_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Age of onset</span><span class="topic-badge" id="badge-onset">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-progression">
           <button class="hint-btn" id="hint-progression" onclick="revealHintBtn('progression')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-progression_followup" onclick="revealHintBtn('progression_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Symptom progression</span><span class="topic-badge" id="badge-progression">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-family">
           <button class="hint-btn" id="hint-family" onclick="revealHintBtn('family')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-family_followup" onclick="revealHintBtn('family_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Family history</span><span class="topic-badge" id="badge-family">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-drugs">
           <button class="hint-btn" id="hint-drugs" onclick="revealHintBtn('drugs')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-drugs_followup" onclick="revealHintBtn('drugs_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Drug history</span><span class="topic-badge" id="badge-drugs">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-rbd">
           <button class="hint-btn" id="hint-rbd" onclick="revealHintBtn('rbd')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-rbd_followup" onclick="revealHintBtn('rbd_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">REM sleep / RBD</span><span class="topic-badge" id="badge-rbd">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-neuro">
           <button class="hint-btn" id="hint-neuro" onclick="revealHintBtn('neuro')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-neuro_followup" onclick="revealHintBtn('neuro_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Neuropsychiatry</span><span class="topic-badge" id="badge-neuro">more to explore</span></div>
         </div>
         <div class="topic-item" id="chip-autonomic">
           <button class="hint-btn" id="hint-autonomic" onclick="revealHintBtn('autonomic')"><span class="hint-label">Hint</span><span>💡</span></button>
+          <button class="hint-btn hint-btn-followup" id="hint-autonomic_followup" onclick="revealHintBtn('autonomic_followup')"><span class="hint-label">Follow-up hint</span><span>💡</span></button>
           <div class="topic-inner topic-row"><span class="topic-dot"></span><span class="topic-name">Autonomic dysfunction</span><span class="topic-badge" id="badge-autonomic">more to explore</span></div>
         </div>
       </div>
@@ -593,13 +607,21 @@ const FOLLOWUP_MAP = {
 
 const TOPIC_LABELS = {
   early_symptoms: 'Early symptoms',
+  early_symptoms_followup: 'Early symptoms — facial expression & voice',
   onset: 'Age of onset',
+  onset_followup: 'Onset — symptoms before the tremor',
   progression: 'Symptom progression',
+  progression_followup: 'Progression — freezing of gait',
   family: 'Family history',
+  family_followup: 'Family history — extended relatives',
   drugs: 'Drug history',
+  drugs_followup: 'Drug history — past & dopamine blockers',
   rbd: 'REM sleep / RBD',
+  rbd_followup: 'REM sleep — duration of symptoms',
   neuro: 'Neuropsychiatry',
-  autonomic: 'Autonomic dysfunction'
+  neuro_followup: 'Neuropsychiatry — vivid dreams & thinking',
+  autonomic: 'Autonomic dysfunction',
+  autonomic_followup: 'Autonomic — fainting'
 };
 
 const topicState = {};
@@ -866,7 +888,8 @@ async function sendMessage() {
     if (count === 1) {
       patientReply = baseResponse;
     } else if (count === 2) {
-      patientReply = `As I mentioned — ${baseResponse} Did you mean something else?`;
+      const lowerResponse = baseResponse.charAt(0).toLowerCase() + baseResponse.slice(1);
+      patientReply = `As I mentioned — ${lowerResponse} Did you mean something else?`;
     } else {
       patientReply = `I think we've already covered that. Perhaps there's another area you'd like to ask about?`;
     }
